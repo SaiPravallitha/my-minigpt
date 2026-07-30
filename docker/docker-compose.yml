@@ -1,0 +1,15 @@
+services:
+  mini-chatgpt:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist downloaded model weights across container restarts/rebuilds
+      - hf_cache:/app/.hf_cache
+      # Bind-mount the whole RAG folder: lets you add documents from the
+      # host without rebuilding, and the generated index persists on disk
+      - ./phase3_rag:/app/phase3_rag
+    restart: unless-stopped
+
+volumes:
+  hf_cache:

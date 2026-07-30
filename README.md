@@ -1,90 +1,143 @@
-# Mini-ChatGPT — Build Your Own LLM + RAG Platform From Scratch
+# 🧠 Mini-ChatGPT — An LLM + RAG Platform Built From Scratch
 
-A hands-on project to learn full-stack AI engineering: transformer internals,
-local LLM inference, RAG, and a web chat UI — all running on a CPU laptop.
+![Python](https://img.shields.io/badge/python-3.11-blue)
+![PyTorch](https://img.shields.io/badge/PyTorch-CPU--only-ee4c2c)
+![FastAPI](https://img.shields.io/badge/backend-FastAPI-009688)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Status](https://img.shields.io/badge/status-learning--project-orange)
 
-## Roadmap
+A hands-on, end-to-end AI engineering project: a hand-written transformer,
+local LLM inference, a retrieval-augmented generation (RAG) pipeline, and a
+full-stack chat app with conversation memory — **all running on a CPU-only
+laptop, no paid APIs.**
 
-| Phase | What you build | What you learn |
-|-------|-----------------|-----------------|
-| 0 | Environment + Git setup | Tooling every AI engineer uses |
-| 1 | Tiny GPT trained from scratch | Attention, transformer blocks, training loop |
-| 2 | Local inference with a small pretrained model | Tokenization, generation, sampling params |
-| 3 | RAG pipeline (embeddings + vector search) | Retrieval, chunking, grounding an LLM |
-| 4 | FastAPI backend + HTML/JS frontend | Full-stack serving of an AI app |
+Built as a learning project to understand every layer of a ChatGPT-style
+system, from raw attention math up to a served web UI.
 
-Work through phases in order. Commit to git after each phase (instructions below).
+## Architecture
 
-## Phase 0 — Environment Setup (Windows/Dell laptop, CPU only)
+```
+┌─────────────┐      ┌──────────────────┐      ┌────────────────────┐
+│  Frontend   │ HTTP │  FastAPI Backend │      │  Local LLM         │
+│  (HTML/JS)  │◄────►│  + session       │◄────►│  (flan-t5-small,   │
+│  chat UI    │      │    memory        │      │   runs on CPU)     │
+└─────────────┘      └────────┬─────────┘      └────────────────────┘
+                               │
+                               ▼
+                     ┌───────────────────┐      ┌────────────────────┐
+                     │  RAG Pipeline     │◄────►│  FAISS vector store│
+                     │  (retrieve top-k) │      │  + MiniLM embedder │
+                     └───────────────────┘      └────────────────────┘
 
-1. **Install Python 3.10 or 3.11** (not 3.12+, some ML libs lag behind):
-   https://www.python.org/downloads/ — during install, check "Add Python to PATH".
-
-2. **Install Git**: https://git-scm.com/downloads
-
-3. **Install VS Code** (recommended editor): https://code.visualstudio.com/
-   - Install the "Python" extension inside VS Code.
-
-4. **Open a terminal** (PowerShell) in the folder where you want the project, then:
-
-```bash
-git clone <this won't apply to you — instead you'll init your own repo, see below>
-cd mini-chatgpt
-
-# Create an isolated Python environment
-python -m venv venv
-
-# Activate it (Windows PowerShell)
-venv\Scripts\activate
-# (Mac/Linux equivalent: source venv/bin/activate)
-
-# Upgrade pip
-python -m pip install --upgrade pip
-
-# Install all dependencies
-pip install -r requirements.txt
+               (separately) Phase 1: hand-built GPT trained from
+               scratch in raw PyTorch — the "how does this work" phase
 ```
 
-> CPU-only PyTorch: `requirements.txt` already pins the CPU build. If `pip install torch`
-> ever tries to pull a huge CUDA build, instead run:
-> `pip install torch --index-url https://download.pytorch.org/whl/cpu`
+## What's inside
 
-## Git Versioning (do this in parallel, from day 1)
+| Phase | Folder | What it does |
+|---|---|---|
+| 1 | [`phase1_scratch_gpt/`](phase1_scratch_gpt) | A GPT written from scratch in raw PyTorch (attention, transformer blocks, training loop) |
+| 2 | [`phase2_pretrained_chat/`](phase2_pretrained_chat) | Local CPU inference using a small open-weight pretrained model |
+| 3 | [`phase3_rag/`](phase3_rag) | Retrieval-augmented generation: embeddings + FAISS + grounded answers |
+| 4 | [`backend/`](backend) + [`frontend/`](frontend) | FastAPI backend with session-based conversation memory + a chat web UI |
+
+Each folder has its own README with run instructions and "what you're learning here" notes.
+
+## Quickstart
 
 ```bash
+git clone https://github.com/<your-username>/mini-chatgpt.git
 cd mini-chatgpt
+python -m venv venv
+venv\Scripts\activate          # Windows; use `source venv/bin/activate` on Mac/Linux
+pip install -r requirements.txt
+
+# Build the RAG index (one-time)
+python phase3_rag/embed_store.py
+
+# Run the full app
+uvicorn backend.main:app --reload --port 8000
+```
+
+Open **http://localhost:8000** — toggle between plain chat and RAG-grounded chat, with memory across turns.
+
+Or run it in Docker (no local Python setup needed at all) — see [Docker](#run-with-docker) below.
+
+## Features
+
+- 🔬 **Transformer built from scratch** — no `transformers` library in Phase 1, every matrix multiply is visible
+- 🤖 **Local LLM inference** — open-weight model running entirely offline after first download, no API keys, no cost
+- 📚 **RAG** — answers grounded in your own documents via embeddings + vector search
+- 💬 **Conversation memory** — per-session chat history, sliding-window context
+- 🧱 **Full-stack** — FastAPI REST API + vanilla JS chat UI
+- 🐳 **Dockerized** — one command to build and run anywhere
+- ✅ **CPU-only** — every component was deliberately chosen to run without a GPU
+
+## Run with Docker
+
+```bash
+docker compose up --build
+```
+
+Then open http://localhost:8000. First run downloads model weights (~400MB) and builds the RAG index; both persist in Docker volumes, so subsequent `docker compose up` runs start instantly. See the [Docker section below](#docker-details) for details.
+
+## Git workflow used in this project
+
+```bash
 git init
 git add .
 git commit -m "chore: initial project scaffold"
 
-# After finishing each phase below:
-git add .
 git commit -m "feat(phase1): tiny GPT trains and generates text"
 git commit -m "feat(phase2): local inference with pretrained small model"
 git commit -m "feat(phase3): RAG pipeline with FAISS + embeddings"
 git commit -m "feat(phase4): FastAPI backend + chat frontend"
+git commit -m "feat: add per-session conversation memory"
+git commit -m "chore: add Docker support"
 ```
 
-Optional (recommended): create a free GitHub repo and push it, so you have a portfolio piece:
+## Hardware notes (CPU laptop)
+
+- Phase 1 (tiny GPT, ~1-5M params): trains in a few minutes on a small text file
+- Phase 2/backend (flan-t5-small, ~80M params): 1-5 seconds per response on CPU
+- Phase 3 embeddings (MiniLM, 22M params): near-instant on CPU
+- Nothing here requires a GPU, an API key, or a paid service
+
+## Environment setup (Windows / Dell laptop, CPU only)
+
+1. **Python 3.10 or 3.11** (not 3.12+, some ML libs lag behind): https://www.python.org/downloads/ — check "Add Python to PATH" during install.
+2. **Git**: https://git-scm.com/downloads
+3. **VS Code** (recommended editor): https://code.visualstudio.com/ — install the "Python" extension.
+4. **Docker Desktop** (only needed if you want the Docker route): https://www.docker.com/products/docker-desktop/
+
+> If `pip install torch` ever tries to pull a huge CUDA build, run instead:
+> `pip install torch --index-url https://download.pytorch.org/whl/cpu`
+
+## Docker details
+
+**Files:**
+- `Dockerfile` — builds a Python 3.11 image, installs dependencies, copies the project, exposes port 8000
+- `docker-compose.yml` — builds the image, maps port 8000, and mounts two volumes:
+  - `hf_cache` (named volume) — keeps downloaded model weights across restarts
+  - `./phase3_rag` (bind mount) — keeps your documents and generated FAISS index in sync with the host, so you can add `.txt` files without rebuilding
+- `.dockerignore` — keeps `venv/`, `.git/`, caches, and checkpoints out of the image
+
+**Common commands:**
 ```bash
-git remote add origin https://github.com/<your-username>/mini-chatgpt.git
-git branch -M main
-git push -u origin main
+docker compose up --build     # build the image and start the container
+docker compose up -d          # run in the background
+docker compose logs -f        # follow logs
+docker compose down           # stop and remove the container (volumes persist)
+docker compose down -v        # stop and also wipe the volumes (forces re-download)
 ```
 
-Suggested branching habit while learning: create a branch per phase (`git checkout -b phase2-inference`), merge to `main` when it works.
+**Why this matters for your learning:** containerizing means the whole
+app — Python version, every dependency, the model download, the server —
+runs identically on any machine with Docker installed, without anyone
+needing to manually replicate your `venv` setup. This is exactly how
+real AI services get deployed to production.
 
-## Phase-by-phase instructions
+## License
 
-See the README inside each phase folder:
-- `phase1_scratch_gpt/README.md`
-- `phase2_pretrained_chat/README.md`
-- `phase3_rag/README.md`
-- `backend/README.md`
-
-## Hardware expectations (CPU laptop)
-
-- Phase 1 (tiny GPT, ~1-5M params): trains in a few minutes on a small text file.
-- Phase 2 (DistilGPT2 / GPT-2 small, 82M-124M params): inference takes 1-5 seconds per response on CPU.
-- Phase 3 RAG embeddings model (MiniLM, 22M params): near-instant on CPU.
-- Everything here was chosen specifically to run without a GPU.
+MIT — see [LICENSE](LICENSE).
