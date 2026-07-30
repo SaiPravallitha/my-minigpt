@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Mini-ChatGPT</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --panel: #1a1d27;
+    --bubble-user: #4f7cff;
+    --bubble-bot: #262a37;
+    --text: #e8e9ee;
+    --muted: #8a8fa3;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 16px 24px;
+    background: var(--panel);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #2a2d3a;
+  }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  .mode-toggle {
+    display: flex;
+    gap: 8px;
+    font-size: 13px;
+  }
+  .mode-toggle button {
+    background: #262a37;
+    color: var(--muted);
+    border: 1px solid #333748;
+    padding: 6px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .mode-toggle button.active {
+    background: var(--bubble-user);
+    color: white;
+    border-color: var(--bubble-user);
+  }
+  #chat {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .msg { max-width: 70%; padding: 10px 14px; border-radius: 14px; line-height: 1.4; font-size: 14px; }
+  .msg.user { align-self: flex-end; background: var(--bubble-user); color: white; border-bottom-right-radius: 4px; }
+  .msg.bot { align-self: flex-start; background: var(--bubble-bot); border-bottom-left-radius: 4px; }
+  .sources { font-size: 11px; color: var(--muted); margin-top: 6px; }
+  form {
+    display: flex;
+    padding: 16px;
+    gap: 10px;
+    background: var(--panel);
+    border-top: 1px solid #2a2d3a;
+  }
+  input {
+    flex: 1;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid #333748;
+    background: #12141c;
+    color: var(--text);
+    font-size: 14px;
+  }
+  button[type="submit"] {
+    background: var(--bubble-user);
+    color: white;
+    border: none;
+    padding: 0 20px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .typing { color: var(--muted); font-style: italic; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Mini-ChatGPT (local CPU model)</h1>
+  <div class="mode-toggle">
+    <button id="mode-chat" class="active">Plain chat</button>
+    <button id="mode-rag">RAG (grounded)</button>
+    <button id="new-chat">New chat</button>
+  </div>
+</header>
+
+<div id="chat"></div>
+
+<form id="chat-form">
+  <input id="chat-input" placeholder="Type a message..." autocomplete="off" />
+  <button type="submit">Send</button>
+</form>
+
+<script>
+  const chatEl = document.getElementById("chat");
+  const form = document.getElementById("chat-form");
+  const input = document.getElementById("chat-input");
+  const modeChatBtn = document.getElementById("mode-chat");
+  const modeRagBtn = document.getElementById("mode-rag");
+
+  let mode = "chat"; // "chat" or "rag"
+
+  // Conversation memory lives server-side, keyed by this session_id.
+  // We keep the id itself in localStorage just so a page refresh
+  // continues the same conversation instead of starting a new one.
+  let sessionId = localStorage.getItem("mini_chatgpt_session_id");
+  if (!sessionId) {
+    sessionId = crypto.randomUUID();
+    localStorage.setItem("mini_chatgpt_session_id", sessionId);
+  }
+
+  document.getElementById("new-chat").onclick = async () => {
+    await fetch("/api/reset", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "", session_id: sessionId }),
+    });
+    sessionId = crypto.randomUUID();
+    localStorage.setItem("mini_chatgpt_session_id", sessionId);
+    chatEl.innerHTML = "";
+  };
+
+  modeChatBtn.onclick = () => setMode("chat");
+  modeRagBtn.onclick = () => setMode("rag");
+
+  function setMode(m) {
+    mode = m;
+    modeChatBtn.classList.toggle("active", m === "chat");
+    modeRagBtn.classList.toggle("active", m === "rag");
+  }
+
+  function addMessage(text, who, sources) {
+    const div = document.createElement("div");
+    div.className = "msg " + who;
+    div.textContent = text;
+    if (sources && sources.length) {
+      const src = document.createElement("div");
+      src.className = "sources";
+      src.textContent = "Sources: " + sources.join(" | ");
+      div.appendChild(src);
+    }
+    chatEl.appendChild(div);
+    chatEl.scrollTop = chatEl.scrollHeight;
+    return div;
+  }
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const message = input.value.trim();
+    if (!message) return;
+    addMessage(message, "user");
+    input.value = "";
+
+    const typing = addMessage("thinking...", "bot");
+    typing.classList.add("typing");
+
+    const endpoint = mode === "rag" ? "/api/rag_chat" : "/api/chat";
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message, session_id: sessionId }),
+      });
+      const data = await res.json();
+      sessionId = data.session_id;
+      localStorage.setItem("mini_chatgpt_session_id", sessionId);
+      typing.remove();
+      addMessage(data.reply, "bot", data.sources);
+    } catch (err) {
+      typing.textContent = "Error reaching backend. Is uvicorn running?";
+      typing.classList.remove("typing");
+    }
+  });
+</script>
+
+</body>
+</html>
