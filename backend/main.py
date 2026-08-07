@@ -28,7 +28,7 @@ from pydantic import BaseModel
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "phase2_pretrained_chat"))
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "phase3_rag"))
-from chat_model import LocalChatModel  # noqa: E402
+from chat_model_llamacpp import LocalChatModel  # noqa: E402
 from rag_pipeline import RAGPipeline   # noqa: E402
 
 app = FastAPI(title="Mini-ChatGPT")
@@ -111,7 +111,7 @@ class ChatResponse(BaseModel):
 def chat(req: ChatRequest):
     session_id = req.session_id or str(uuid.uuid4())
     prompt = build_prompt_with_history(session_id, req.message)
-    reply = chat_model.generate(prompt)
+    reply = chat_model.generate(prompt, creative=True)
     remember(session_id, req.message, reply)
     return ChatResponse(reply=reply, session_id=session_id)
 
@@ -129,7 +129,7 @@ def rag_chat(req: ChatRequest):
     retrieved = rag_pipeline.retrieve(req.message)
     context = "\n".join(f"- {chunk}" for chunk, _ in retrieved)
     prompt = build_prompt_with_history(session_id, req.message, context=context)
-    reply = chat_model.generate(prompt)
+    reply = chat_model.generate(prompt, creative=False)
     remember(session_id, req.message, reply)
 
     sources = [chunk for chunk, _ in retrieved]
